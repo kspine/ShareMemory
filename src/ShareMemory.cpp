@@ -2,14 +2,13 @@
 // Created by sen on 15-9-10.
 //
 
-#include <stddef.h>
-#include <unistd.h>
 #include "ShareMemory.h"
 
 shm::ShareMemory::ShareMemory()
 {
     setMemoryCreated(false);
     setMemoryAttach(false);
+    setMemorySize(0);
 }
 
 shm::ShareMemory::ShareMemory(shm::ShmKey key, shm::ShmSize size, ShmType type)
@@ -37,9 +36,18 @@ bool shm::ShareMemory::open(shm::ShmKey key)
     if(isMemoryCreated())
         free();
     setShmKey(key);
+#ifndef _WIN32
     if((_shmId = shmget(key, 0, IPC_CREAT | 0666)) != -1)
+#else
+    char buf[20];
+    sprintf(buf, "%d", key);
+    HANDLE id = OpenFileMappingA(FILE_MAP_ALL_ACCESS, false, buf);
+    _shmId = (ShmId)id;
+    if(id != NULL)
+#endif
     {
         setMemoryCreated(true);
+        setMemorySize(0);
         return true;
     }
     return false;
@@ -50,12 +58,31 @@ bool shm::ShareMemory::create(shm::ShmKey key, shm::ShmSize size)
     if(isMemoryCreated())
         free();
     setShmKey(key);
+#ifndef _WIN32
     if((_shmId = shmget(key, size, IPC_CREAT | IPC_EXCL | 0666)) != -1)
+#else
+    char buf[20];
+    sprintf(buf, "%d", key);
+    HANDLE id = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, size, buf);
+    _shmId = (ShmId)id;
+    if(id != NULL)
+#endif
     {
         setMemoryCreated(true);
+        setMemorySize(size);
         return true;
     }
     return false;
+}
+
+const shm::ShmSize &shm::ShareMemory::getShmSize() const
+{
+    return _memSize;
+}
+
+void shm::ShareMemory::setMemorySize(shm::ShmSize size)
+{
+    _memSize = size;
 }
 
 void *shm::ShareMemory::getAddress()
@@ -65,7 +92,11 @@ void *shm::ShareMemory::getAddress()
     {
         if(!isMemoryAttach())
         {
+#ifndef _WIN32
             _addr = shmat(getShmId(), NULL, 0);
+#else
+            _addr = MapViewOfFile((HANDLE)getShmId(), FILE_MAP_ALL_ACCESS, 0, 0, getShmSize());
+#endif
             setMemoryAttach(true);
         }
         addr = _addr;
@@ -77,12 +108,20 @@ void shm::ShareMemory::free()
 {
     if(isMemoryAttach())
     {
+#ifndef _WIN32
         shmdt(getAddress());
+#else
+        UnmapViewOfFile(getAddress());
+#endif
         setMemoryAttach(false);
     }
     if(isMemoryCreated())
     {
+#ifndef _WIN32
         shmctl(getShmId(), IPC_RMID, 0);
+#else
+        CloseHandle((HANDLE)getShmId());
+#endif
         setMemoryCreated(false);
     }
 }
@@ -142,6 +181,18 @@ shm::ShareMemory::ShareMemory(shm::ShmKey key, shm::ShmSize size)
 bool shm::ShareMemory::createRandom(shm::ShmSize size)
 {
     char buf[2048];
-    ShmKey key = ftok(getcwd(buf, sizeof(buf)), MAGICID);
+    ShmKey key = 0;
+#ifndef _WIN32
+    key = ftok(getcwd(buf, sizeof(buf)), MAGICID);
+#else
+    DWORD count = GetCurrentDirectoryA(sizeof(buf), buf);
+    for(int i = 0; i < (signed)count; ++i)
+        key += ((i % 2 == 0) ? buf[i] : buf[i] << 1);
+    key += MAGICID;
+    if(key < 0)
+        key *= -1;
+    else if(key == 0)
+        key = MAGICID;
+#endif
     return create(key, size);
 }

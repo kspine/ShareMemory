@@ -1,6 +1,9 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include <iostream>
 #include <string.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include "src/ShareMemory.h"
 
 using namespace std;
@@ -12,18 +15,24 @@ void child(ShareMemory &memory)
     strcpy(ptr, "Hello world");
 }
 
-int main()
+int main(int argc, char *args[])
 {
-    ShareMemory memory2(0x1234);
-    memory2.createRandom(1024);
-    if(fork() == 0)
+    ShareMemory memory;
+    if(argc == 1)
+        cout << "create:" << memory.create(0x1234, 1024) << endl;
+    else
+        cout << "open:" << memory.open(0x1234) << endl;
+    char *ptr = memory.getAddress<char>();
+    cout << "memory size:" << memory.getShmSize() << endl;
+    if(argc == 1)
     {
-        child(memory2);
-        exit(0);
+        strcpy(ptr, "Hello world");
+        Sleep(30000);
     }
-    sleep(1);
-    char *ptr = memory2.getAddress<char>();
-    cout << ptr << endl;
-
+    else
+    {
+        if(ptr != NULL)
+            cout << ptr << endl;
+    }
     return 0;
 }

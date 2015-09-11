@@ -5,9 +5,18 @@
 #ifndef SHAREMEMORY_SHAREMEMORY_H
 #define SHAREMEMORY_SHAREMEMORY_H
 
+#ifndef _WIN32
 #include <sys/ipc.h>
 #include <sys/shm.h>
-#define DEBUG
+#include <unistd.h>
+#else
+#define _CRT_SECURE_NO_WARNINGS
+#include <windows.h>
+#endif
+
+#include <stddef.h>
+#include <stdio.h>
+
 #ifdef DEBUG
 #include <iostream>
 using namespace std;
@@ -18,8 +27,12 @@ using namespace std;
 
 namespace shm
 {
+#ifndef _WIN32
     using ShmKey = key_t;
-    using ShmId = int;
+#else
+    using ShmKey = long;
+#endif
+    using ShmId = long;
     using ShmSize = size_t;
 
     class ShareMemory
@@ -41,6 +54,7 @@ namespace shm
         void free();
         const ShmKey &getShmKey() const;
         const ShmId &getShmId() const;
+        const ShmSize &getShmSize() const;
         bool isMemoryCreated() const;
         bool isMemoryAttach() const;
 
@@ -59,6 +73,7 @@ namespace shm
         void setMemoryAttach(bool state);
         void setShmKey(ShmKey key);
         void setShmId(ShmId id);
+        void setMemorySize(ShmSize size);
 
     private:
         ShmKey _memKey;
@@ -66,6 +81,7 @@ namespace shm
         bool _isCreated;
         bool _isAttached;
         void *_addr;
+        ShmSize _memSize;
     };
 }
 
